@@ -1,0 +1,42 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./docker/Modelfile:/Modelfile:ro
+      - ./docker/ensure-model.sh:/ensure-model.sh:ro
+      - ${GGUF_FILE:-./docker/no-model}:/model.gguf:ro
+    entrypoint: ["/bin/sh", "/ensure-model.sh"]
+
+  agent:
+    build: .
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      LLM_PROVIDER: ollama
+      OLLAMA_MODEL: qwen2.5:3b
+      OLLAMA_BASE_URL: http://ollama:11434
+      API_BASE_URL: http://127.0.0.1:8765
+      LLM_TEMPERATURE: "0"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  ollama:
